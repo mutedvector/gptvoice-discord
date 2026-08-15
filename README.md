@@ -21,8 +21,10 @@ guilds receive isolated subprofiles automatically.
 - A Discord bot token.
 - A ChatGPT account with Voice available.
 - Brave, Chrome, or Edge installed for the dedicated ChatGPT browser session.
-- A Discord bot invitation with permission to view channels, send messages,
-  connect to voice channels, and speak.
+- A Discord bot invitation created with the `bot` and `applications.commands`
+  OAuth2 scopes. Give the bot these permissions: **View Channels**, **Send
+  Messages**, **Embed Links**, **Read Message History**, **Connect**, and
+  **Speak**. Administrator permission is not required.
 
 ## First-time setup
 
@@ -36,7 +38,14 @@ guilds receive isolated subprofiles automatically.
    copy the new token immediately. Discord only shows a token when it is
    generated, and resetting it invalidates the previous token. Treat it like a
    password and never share it.
-4. In GPTVoice, open **Config** and paste the bot token. To find the Discord
+4. Invite the bot to your server. In the Developer Portal, open **OAuth2** →
+   **URL Generator**, select the `bot` and `applications.commands` scopes,
+   select **View Channels**, **Send Messages**, **Embed Links**, **Read Message
+   History**, **Connect**, and **Speak** under Bot Permissions, then open the
+   generated URL and authorize the bot for your server.
+   Members who use `/join` also need **Use Application Commands** allowed in
+   that text channel.
+5. In GPTVoice, open **Config** and paste the bot token. To find the Discord
    server ID, open **User Settings** (the gear beside your username), scroll
    the settings list until you reach **Developer**, open it, and turn on
    **Developer Mode**. Then right-click the server name or icon and choose
@@ -45,12 +54,12 @@ guilds receive isolated subprofiles automatically.
    connection automatically. The guild ID selects the server used for startup
    status and thread prefetching; other servers can still use the global slash
    commands.
-5. Join a Discord voice channel and run `/join` in a text channel where the
+6. Join a Discord voice channel and run `/join` in a text channel where the
    bot can send messages.
-6. On the first run, GPTVoice opens its dedicated browser profile. Sign into
+7. On the first run, GPTVoice opens its dedicated browser profile. Sign into
    ChatGPT and complete any human verification yourself. Then run `/join`
    again.
-7. GPTVoice prefetches the five most recent ChatGPT threads automatically when
+8. GPTVoice prefetches the five most recent ChatGPT threads automatically when
    the dedicated browser session starts. In the desktop **Status** tab, choose
    **New thread + Voice** or select a recent thread and choose **Resume + Voice**.
 
