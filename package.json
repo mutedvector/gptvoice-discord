@@ -1,6 +1,6 @@
 {
   "name": "gptvoice",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "A native Windows Discord-to-ChatGPT Voice relay using dedicated browser profiles, local CDP control, and browser-local media routing.",
   "repository": {
