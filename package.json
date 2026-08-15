@@ -1,0 +1,18 @@
+{
+  "name": "gptvoice",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A native Windows Discord-to-ChatGPT Voice relay using dedicated browser profiles, local CDP control, and browser-local media routing.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mutedvector/gptvoice-discord.git"
+  },
+  "homepage": "https://github.com/mutedvector/gptvoice-discord",
+  "type": "module",
+  "scripts": {
+    "tauri:dev": "cargo tauri dev",
+    "tauri:build": "cargo tauri build",
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/browser/media-bridge.js"
+  }
+}

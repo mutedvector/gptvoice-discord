@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GPTVoice</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <nav class="tab-bar" aria-label="GPTVoice sections">
+        <button class="tab-button active" data-tab="console">Console</button>
+        <button class="tab-button" data-tab="status">Status</button>
+        <button class="tab-button" data-tab="performance">Performance</button>
+        <button class="tab-button" data-tab="system">System</button>
+        <button class="tab-button" data-tab="settings">Settings</button>
+        <button class="tab-button" data-tab="config">Config</button>
+      </nav>
+      <div id="update-banner" class="update-banner hidden" role="status"></div>
+      <div id="auth-banner" class="onboarding-banner hidden" role="alert">
+        <div class="onboarding-copy">
+          <strong>ChatGPT sign-in required</strong>
+          <span>Sign in to your ChatGPT account in the dedicated GPTVoice browser window. This profile is separate from your normal browser.</span>
+        </div>
+        <button class="button primary" id="auth-banner-show-browser" type="button">Show sign-in window</button>
+      </div>
+
+      <main class="tab-panels">
+        <section class="tab-panel active" data-panel="console">
+          <div class="panel-toolbar console-toolbar">
+            <div class="toolbar-group">
+              <button class="button" id="console-clear">Clear</button>
+              <button class="button" id="console-copy">Copy</button>
+              <button class="button" id="console-copy-selection">Copy Selection</button>
+            </div>
+            <label class="search-box">
+              <span>Search:</span>
+              <input id="console-search" type="search" placeholder="Type to search">
+              <span class="match-count" id="console-match-count">0 matches</span>
+            </label>
+            <label class="checkbox compact"><input id="console-autoscroll" type="checkbox" checked><span>Auto-scroll</span></label>
+          </div>
+          <textarea id="console-output" class="console-output" readonly spellcheck="false" aria-label="GPTVoice console"></textarea>
+        </section>
+
+        <section class="tab-panel" data-panel="status">
+          <div class="split-layout status-layout">
+            <div class="card guild-card">
+              <div class="card-title-row"><h2>Connected Guilds</h2><span class="badge" id="guild-count">0</span></div>
+              <div class="list" id="guild-list"><div class="empty-state">Waiting for Discord...</div></div>
+            </div>
+            <div class="card details-card">
+              <h2>GPTVoice Details</h2>
+              <div class="detail-grid">
+                <div><span class="detail-label">Discord</span><strong id="status-discord">Disconnected</strong></div>
+                <div><span class="detail-label">Bot account</span><strong id="status-bot">—</strong></div>
+                <div><span class="detail-label">Browser</span><strong id="status-browser">Closed</strong></div>
+                <div><span class="detail-label">ChatGPT login</span><strong id="status-login">Not detected</strong></div>
+                <div><span class="detail-label">Voice</span><strong id="status-voice">Inactive</strong></div>
+                <div><span class="detail-label">Voice profile</span><strong id="status-current-voice">—</strong></div>
+                <div><span class="detail-label">Intelligence</span><strong id="status-current-intelligence">—</strong></div>
+                <div><span class="detail-label">Language</span><strong id="status-current-language">—</strong></div>
+                <div><span class="detail-label">Discord channel</span><strong id="status-channel">—</strong></div>
+                <div><span class="detail-label">Active thread</span><strong id="status-thread">—</strong></div>
+                <div><span class="detail-label">ChatGPT microphone</span><strong id="status-mic">—</strong></div>
+                <div><span class="detail-label">Audio routing</span><strong id="status-audio-mode">—</strong></div>
+                <div><span class="detail-label">Window</span><strong id="status-window">—</strong></div>
+                <div><span class="detail-label">Media transport</span><strong id="status-media">—</strong></div>
+                <div><span class="detail-label">Updates</span><strong id="status-update">Checking…</strong></div>
+              </div>
+              <div class="status-actions">
+                <button class="button primary" id="status-start-browser">Start browser</button>
+                <button class="button" id="status-show-browser">Show browser</button>
+                <button class="button" id="status-hide-browser">Hide browser</button>
+                <button class="button" id="status-refresh">Refresh</button>
+                <button class="button primary" id="status-reconnect">Reconnect Voice</button>
+                <button class="button" id="status-new-thread">New thread + Voice</button>
+                <select id="status-thread-select" aria-label="Recent ChatGPT threads"><option value="">Select a recent thread…</option></select>
+                <button class="button" id="status-resume-thread">Resume + Voice</button>
+                <button class="button" id="status-toggle-mic">Mute input</button>
+                <select id="status-voice-select" aria-label="ChatGPT voice"><option value="">Voice options appear after Voice starts…</option></select>
+                <select id="status-intelligence-select" aria-label="ChatGPT intelligence"><option value="">Intelligence options appear after Voice starts…</option></select>
+                <select id="status-language-select" aria-label="ChatGPT language"><option value="">Language options appear after Voice starts…</option></select>
+              </div>
+            </div>
+          </div>
+          <div class="status-note warning-note hidden" id="status-mic-permission" role="alert"></div>
+          <div class="status-note" id="status-feedback">The desktop panel is connected to the GPTVoice runtime.</div>
+        </section>
+
+        <section class="tab-panel" data-panel="performance">
+          <div class="panel-toolbar">
+            <label>Window:
+              <select id="performance-window">
+                <option value="30">30 seconds</option>
+                <option value="60" selected>60 seconds</option>
+                <option value="300">5 minutes</option>
+              </select>
+            </label>
+            <button class="button" id="performance-refresh">Refresh</button>
+            <span class="health-dot" id="performance-health">●</span>
+            <strong id="performance-quality">Quality: —</strong>
+          </div>
+          <div class="chart-grid">
+            <div class="card chart-card"><div class="card-title-row"><h2>Audio timing</h2><span class="muted">live</span></div><canvas id="audio-chart" width="560" height="190"></canvas></div>
+            <div class="card chart-card"><div class="card-title-row"><h2>Media packets</h2><span class="muted">live</span></div><canvas id="cpu-chart" width="560" height="190"></canvas></div>
+          </div>
+          <div class="stat-grid performance-stats">
+            <div class="stat-card"><span>Browser status</span><strong id="metric-duration">—</strong></div>
+            <div class="stat-card"><span>Media connected</span><strong id="metric-browser-gap">—</strong></div>
+            <div class="stat-card"><span>Packets sent</span><strong id="metric-transport-gap">—</strong></div>
+            <div class="stat-card"><span>Packets dropped</span><strong id="metric-underruns">—</strong></div>
+            <div class="stat-card"><span>Packets received</span><strong id="metric-writes">—</strong></div>
+            <div class="stat-card"><span>Discord reader</span><strong id="metric-reader">—</strong></div>
+            <div class="stat-card"><span>Output capture</span><strong id="metric-output-capture">—</strong></div>
+            <div class="stat-card"><span>Output signal</span><strong id="metric-output-signal">—</strong></div>
+            <div class="stat-card"><span>Input queue</span><strong id="metric-input-queue">—</strong></div>
+            <div class="stat-card"><span>Worklet gap</span><strong id="metric-worklet-gap">—</strong></div>
+            <div class="stat-card"><span>Discord guilds</span><strong id="metric-decoded">—</strong></div>
+            <div class="stat-card"><span>Invalid packets</span><strong id="metric-invalid">Not exposed</strong></div>
+            <div class="stat-card"><span>Voice sessions</span><strong id="metric-speakers">—</strong></div>
+            <div class="stat-card"><span>Browser process</span><strong id="metric-users">—</strong></div>
+            <div class="stat-card"><span>Runtime</span><strong id="metric-dropped">Native</strong></div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="system">
+          <div class="system-grid">
+            <div class="card"><h2>Application</h2><dl class="info-list"><div><dt>Version</dt><dd id="system-version">—</dd></div><div><dt>Process ID</dt><dd id="system-pid">—</dd></div><div><dt>Uptime</dt><dd id="system-uptime">—</dd></div><div><dt>Runtime</dt><dd id="system-runtime">Rust / Tauri</dd></div></dl></div>
+            <div class="card"><h2>Operating System</h2><dl class="info-list"><div><dt>Platform</dt><dd id="system-platform">—</dd></div><div><dt>Architecture</dt><dd id="system-arch">—</dd></div><div><dt>CPU cores</dt><dd id="system-cpus">—</dd></div><div><dt>Memory</dt><dd id="system-memory">—</dd></div></dl></div>
+            <div class="card"><h2>ChatGPT Browser</h2><dl class="info-list"><div><dt>Executable</dt><dd class="path-value" id="system-browser-executable">Automatic</dd></div><div><dt>Process</dt><dd id="system-browser-process">—</dd></div><div><dt>Profile</dt><dd class="path-value" id="system-browser-profile">—</dd></div><div><dt>URL</dt><dd class="path-value" id="system-browser-url">—</dd></div></dl></div>
+            <div class="card"><h2>Native host</h2><div class="memory-meter"><div class="meter-track"><span id="memory-meter-fill"></span></div><div class="meter-labels"><span id="system-rss">Rust host</span><span id="system-heap">WebView2</span></div></div><p class="muted system-help">The native host uses the Windows WebView2 runtime for this control panel.</p></div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="settings">
+          <div class="settings-column">
+            <div class="card settings-section"><h2>Appearance</h2><div class="form-grid"><label>Theme<select id="setting-theme"><option value="dark">Dark</option><option value="darcula">Darcula</option><option value="light">Light</option><option value="intellij">IntelliJ</option></select></label><label>Font size<input id="setting-font-size" type="number" min="11" max="20" value="13"></label></div><p class="form-note">Theme and font size are applied immediately to the control panel.</p></div>
+            <div class="card settings-section"><h2>Audio</h2><div class="form-grid"><label>Mic to ChatGPT <output id="setting-input-volume-label">100%</output><input id="setting-input-volume" type="range" min="0" max="4" step="0.01" value="1"></label><label>ChatGPT to Discord <output id="setting-output-volume-label">100%</output><input id="setting-output-volume" type="range" min="0" max="4" step="0.01" value="1"></label><label>Earcons<input id="setting-earcons" type="checkbox" checked></label><label>Earcon volume<input id="setting-earcon-volume" type="range" min="0" max="1" step="0.01" value="0.18"></label></div><p class="form-note">The percentage labels remain familiar while the relay applies the configured gain curve. Audio and browser settings save automatically when changed.</p></div>
+            <div class="card settings-section"><h2>Browser</h2><div class="form-grid"><label class="wide">Start hidden after login<input id="setting-browser-hidden" type="checkbox" checked></label><label class="wide">Audio mode<select id="setting-audio-mode"><option value="browser-media">Browser media (recommended)</option><option value="browser-process">Browser process</option><option value="device">Windows audio device</option></select></label></div><p class="form-note">GPTVoice uses its own persistent browser profile and does not close your everyday Brave window.</p></div>
+            <div class="settings-actions"><button class="button" id="settings-reset">Reset form</button><span class="form-feedback" id="settings-feedback">Changes save automatically.</span></div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="config">
+          <div class="card config-card"><div class="card-title-row"><div><h2>Runtime configuration</h2><p class="muted">Safe configuration values and the Discord token can be edited here. The saved token is never displayed in plain text.</p></div><span class="badge" id="config-restart-badge">Auto-start enabled</span></div><div class="form-grid config-grid"><label>Discord bot token<input id="config-discord-token" type="password" placeholder="****************" autocomplete="off" spellcheck="false"></label><label>Discord guild ID<small class="field-help">In Discord, open User Settings → Advanced and enable Developer Mode. Then right-click your server and choose Copy Server ID.</small><input id="config-guild-id" type="text"></label><label>ChatGPT URL<input id="config-chatgpt-url" type="url"></label><label class="wide">Browser executable<input id="config-browser-executable" type="text"></label><label>Sample rate<input id="config-sample-rate" type="number" min="8000"></label><label>Channels<input id="config-channels" type="number" min="1" max="8"></label></div><p class="form-note">A saved token is shown as stars. Enter a replacement token to change it; leave this field blank to keep the current token. GPTVoice starts Discord automatically after a valid token is saved and on every later launch.</p><div class="config-actions"><button class="button primary" id="config-save">Save changes</button><button class="button" id="config-reset">Reset</button><span class="form-feedback" id="config-feedback"></span></div><div class="stored-config"><h3>Stored configuration</h3><pre id="config-preview">Waiting for runtime...</pre><p class="muted">Location: <span id="config-path">—</span></p></div></div>
+        </section>
+      </main>
+
+      <footer class="status-bar">
+        <div class="status-bar-left"><span class="connection-state disconnected" id="footer-connection">Disconnected</span><span class="separator"></span><span>Guilds: <strong id="footer-guilds">0</strong></span><span class="separator"></span><span>Voice: <strong id="footer-voice">0</strong></span><span class="separator"></span><span>Uptime: <strong id="footer-uptime">—</strong></span></div>
+        <div>Memory: <strong id="footer-memory">Native</strong></div>
+      </footer>
+    </div>
+    <script src="main.js"></script>
+  </body>
+</html>
