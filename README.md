@@ -29,11 +29,14 @@ guilds receive isolated subprofiles automatically.
 1. Download the latest `GPTVoice_<version>_x64-setup.exe` from Releases and
    install it.
 2. Open GPTVoice and select the **Config** tab.
-3. Paste the Discord bot token, enter the Discord server ID for the desktop
-   session, and choose **Save changes**. A saved token is shown only as stars.
-   GPTVoice starts the Discord connection automatically. The guild ID selects
-   the server used for startup status and thread prefetching; other servers can
-   still use the global slash commands.
+3. Paste the Discord bot token. To find the optional Discord server ID, click
+   **User Settings** (the gear beside your username), scroll to **Advanced**,
+   and turn on **Developer Mode**. Then right-click the server name or icon and
+   choose **Copy Server ID**. Paste that value into GPTVoice and choose **Save
+   changes**. A saved token is shown only as stars. GPTVoice starts the Discord
+   connection automatically. The guild ID selects the server used for startup
+   status and thread prefetching; other servers can still use the global slash
+   commands.
 4. Join a Discord voice channel and run `/join` in a text channel where the
    bot can send messages.
 5. On the first run, GPTVoice opens its dedicated browser profile. Sign into
