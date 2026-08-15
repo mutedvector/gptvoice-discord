@@ -110,6 +110,7 @@ function populateConfig(config) {
   }, null, 2);
   updateVolumeLabels();
   log(config.discordTokenConfigured ? "Loaded saved configuration and masked Discord token." : "Loaded configuration; Discord token is not configured.");
+  updateSetupGuide();
 }
 
 function updateDiscordStatus(status) {
@@ -145,6 +146,42 @@ function updateAuthBanner(browser) {
     : browserOpen
       ? "Sign-in window is open"
       : "Sign-in window opening…";
+  updateSetupGuide();
+}
+
+function updateSetupGuide() {
+  const banner = $("setup-banner");
+  if (!banner) return;
+  const config = state.config;
+  if (!config) {
+    banner.classList.add("hidden");
+    return;
+  }
+  const tokenReady = Boolean(config.discordTokenConfigured);
+  const guildReady = Boolean(String(config.discordGuildId || "").trim());
+  const browserOpen = state.browser?.open === true;
+  if (browserOpen) {
+    banner.classList.add("hidden");
+    return;
+  }
+
+  const title = $("setup-banner-title");
+  const copy = $("setup-banner-copy");
+  const configButton = $("setup-banner-config");
+  if (!tokenReady) {
+    if (title) title.textContent = "Welcome to GPTVoice";
+    if (copy) copy.textContent = "Start in Config: enter your Discord bot token and server ID, then save the changes.";
+    if (configButton) configButton.classList.remove("hidden");
+  } else if (!guildReady) {
+    if (title) title.textContent = "Finish Discord setup";
+    if (copy) copy.textContent = "Open Config and add your Discord guild ID so GPTVoice knows which server to start first.";
+    if (configButton) configButton.classList.remove("hidden");
+  } else {
+    if (title) title.textContent = "Start the dedicated ChatGPT browser";
+    if (copy) copy.textContent = "Your configuration is saved. Open Status and choose Start browser, then sign in to ChatGPT when the window appears.";
+    if (configButton) configButton.classList.add("hidden");
+  }
+  banner.classList.remove("hidden");
 }
 
 function populateDynamicSelect(id, placeholder, values, current, mapValue = (value) => ({ value, label: value })) {
@@ -177,7 +214,14 @@ function updateBrowserStatus(browser) {
   text("status-login", browser?.loggedIn ? "Detected" : browser?.authRequired ? "Sign-in needed" : "Not detected");
   text("status-voice", browser?.voiceModeActive ? "Active" : "Inactive");
   text("status-current-voice", browser?.voice || "Not prefetched");
-  text("status-current-intelligence", browser?.intelligence || "Not prefetched");
+  const intelligenceUnavailable = Boolean(
+    browser?.voiceModeActive &&
+    !browser?.intelligence &&
+    Array.isArray(browser?.availableIntelligence) &&
+    browser.availableIntelligence.length === 0 &&
+    (browser?.voice || browser?.language)
+  );
+  text("status-current-intelligence", browser?.intelligence || (intelligenceUnavailable ? "Unavailable on this account" : "Not prefetched"));
   text("status-current-language", browser?.language || "Not prefetched");
   text("status-thread", browser?.activeThread?.title || "—");
   text("status-mic", browser?.chatgptMicMuted === true ? "Muted" : browser?.chatgptMicMuted === false ? "Live" : "—");
@@ -199,7 +243,16 @@ function updateBrowserStatus(browser) {
   if ([...select.options].some((option) => option.value === selected)) select.value = selected;
   $("status-show-browser").disabled = !browser?.open || !browser.windowHidden;
   $("status-hide-browser").disabled = !browser?.open || browser.windowHidden;
-  $("status-start-browser").disabled = Boolean(browser?.open);
+  const browserConfigReady = Boolean(
+    state.config?.discordTokenConfigured &&
+    String(state.config?.discordGuildId || "").trim()
+  );
+  $("status-start-browser").disabled = !browserConfigReady || Boolean(browser?.open);
+  $("status-start-browser").title = browserConfigReady
+    ? ""
+    : !state.config?.discordTokenConfigured
+      ? "Save the Discord bot token in Config before starting the browser."
+      : "Save a Discord guild ID in Config before starting the browser.";
   $("status-reconnect").disabled = !browser?.open;
   $("status-toggle-mic").disabled = !browser?.voiceModeActive;
   $("status-toggle-mic").textContent = browser?.chatgptMicMuted === true ? "Unmute input" : "Mute input";
@@ -212,7 +265,11 @@ function updateBrowserStatus(browser) {
   );
   populateDynamicSelect(
     "status-intelligence-select",
-    browser?.intelligence ? "Change intelligence…" : "Intelligence options appear after Voice starts…",
+    intelligenceUnavailable
+      ? "Intelligence is not available for this account"
+      : browser?.intelligence
+        ? "Change intelligence…"
+        : "Intelligence options appear after Voice starts…",
     browser?.availableIntelligence,
     browser?.intelligence
   );
@@ -443,6 +500,12 @@ function wireEvents() {
   $("settings-reset").addEventListener("click", () => { if (state.config) populateConfig(state.config); setFeedback("Settings reset.", "settings-feedback"); });
   $("config-save").addEventListener("click", () => void saveConfig());
   $("config-reset").addEventListener("click", () => { if (state.config) populateConfig(state.config); setFeedback("Configuration reset.", "config-feedback"); });
+  $("setup-banner-config").addEventListener("click", () => {
+    switchTab("config");
+    if (!state.config?.discordTokenConfigured) $("config-discord-token")?.focus();
+    else $("config-guild-id")?.focus();
+  });
+  $("setup-banner-status").addEventListener("click", () => switchTab("status"));
   $("status-start-browser").addEventListener("click", () => void run("browser_start", { guildId: state.config?.discordGuildId || "" }));
   $("auth-banner-show-browser").addEventListener("click", () => {
     if (!state.browser?.open) return setFeedback("The dedicated sign-in window is still starting. Complete sign-in there when it appears.", "status-feedback", "warning-text");

@@ -52,6 +52,10 @@ access must be enabled in Settings, choose **Show browser**, grant the
 permission, then choose **Reconnect Voice**. Reconnect refreshes the ChatGPT
 page before starting Voice again.
 
+Some free ChatGPT accounts do not expose an **Intelligence** setting in Voice.
+GPTVoice treats that setting as unavailable and still discovers and controls
+the available Voice and Language options.
+
 GPTVoice can hide the dedicated browser after login. Use **Show browser** in
 the desktop Status tab whenever you need to inspect it. The bot owner does not
 need to remain in the Discord voice channel after the bot has joined.

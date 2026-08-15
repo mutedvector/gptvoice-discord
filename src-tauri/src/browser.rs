@@ -360,9 +360,11 @@ const DISCOVER_OPTIONS_SCRIPT: &str = r#"(async () => {
   const hasSettingsText = (element) => {
     if (!element || element.closest('nav,aside')) return false;
     const text = clean(element.innerText);
-    return text.length <= 5000 && /\bintelligence\b/i.test(text) && /\blanguage\b/i.test(text) &&
-      [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, 'Intelligence')) &&
-      [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, 'Language'));
+    return text.length <= 5000 && /\blanguage\b/i.test(text) &&
+      [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, 'Language')) &&
+      ( /\bintelligence\b/i.test(text) || /\bvoice\b/i.test(text) ||
+        element.querySelectorAll('[role="radio"],input[type="radio"]').length > 0 ||
+        element.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2 );
   };
   const settingsSurface = () => {
     const surfaces = [...document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"],[data-state="open"]')].filter(visible);
@@ -370,8 +372,9 @@ const DISCOVER_OPTIONS_SCRIPT: &str = r#"(async () => {
     if (marked) return marked;
     const intelligence = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Intelligence'));
     const language = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Language'));
-    if (!intelligence || !language) return null;
-    for (let candidate = intelligence, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {
+    const anchor = intelligence || language;
+    if (!anchor || !language) return null;
+    for (let candidate = anchor, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {
       if (visible(candidate) && !candidate.closest('nav,aside') && clean(candidate.innerText).length <= 5000 &&
         /\blanguage\b/i.test(candidate.innerText || '') && [...candidate.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, 'Language')) &&
         (candidate.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2 || /voice settings|voice customization/i.test(candidate.innerText || ''))) return candidate;
@@ -565,9 +568,9 @@ const DISCOVER_OPTIONS_SCRIPT: &str = r#"(async () => {
     seenVoices.add(key);
     voices.push({ value: voice.value.trim(), label: voice.label?.trim() || voice.value.trim(), description: voice.description || null });
   };
-  // The Voice dialog paints the carousel after the Intelligence and Language
-  // rows. Wait for the voice UI itself before discovering those rows; otherwise
-  // a fast prefetch can close the dialog with only the latter two values loaded.
+  // The Voice dialog paints the carousel after its setting rows. Wait for the
+  // voice UI itself before discovering those rows so fast prefetches do not
+  // close the dialog before the voice options are available.
   const voiceUi = await waitForVoiceUi();
   const radioOptions = voiceUi.radios;
   const selectedRadio = radioOptions.find((option) => option.selected);
@@ -629,15 +632,19 @@ const VOICE_SETTINGS_VISIBLE_SCRIPT: &str = r#"(() => {
   const hasSettingsText = (element) => {
     if (!element || element.closest('nav,aside')) return false;
     const text = clean(element.innerText);
-    return text.length <= 5000 && /\bintelligence\b/i.test(text) && /\blanguage\b/i.test(text) &&
-      hasExactDescendant(element, 'Intelligence') && hasExactDescendant(element, 'Language');
+    return text.length <= 5000 && /\blanguage\b/i.test(text) &&
+      hasExactDescendant(element, 'Language') &&
+      ( /\bintelligence\b/i.test(text) || /\bvoice\b/i.test(text) ||
+        element.querySelectorAll('[role="radio"],input[type="radio"]').length > 0 ||
+        element.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2 );
   };
   const surfaces = [...document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"],[data-state="open"]')].filter(visible);
   if (surfaces.filter(hasSettingsText).sort((a, b) => clean(a.innerText).length - clean(b.innerText).length)[0]) return true;
   const intelligence = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Intelligence'));
   const language = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Language'));
-  if (!intelligence || !language) return false;
-  for (let candidate = intelligence, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {
+  const anchor = intelligence || language;
+  if (!anchor || !language) return false;
+  for (let candidate = anchor, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {
     if (visible(candidate) && !candidate.closest('nav,aside') && clean(candidate.innerText).length <= 5000 &&
       /\blanguage\b/i.test(candidate.innerText || '') && hasExactDescendant(candidate, 'Language') &&
       (candidate.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2 || /voice settings|voice customization/i.test(candidate.innerText || ''))) return true;
@@ -932,17 +939,20 @@ impl BrowserSession {
                   const hasSettingsText = (element) => {
                     if (!element || element.closest('nav,aside')) return false;
                     const text = clean(element.innerText);
-                    return text.length <= 5000 && /\bintelligence\b/i.test(text) && /\blanguage\b/i.test(text) &&
-                      [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, 'Intelligence')) &&
-                      [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, 'Language'));
+                    return text.length <= 5000 && /\blanguage\b/i.test(text) &&
+                      [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, 'Language')) &&
+                      ( /\bintelligence\b/i.test(text) || /\bvoice\b/i.test(text) ||
+                        element.querySelectorAll('[role="radio"],input[type="radio"]').length > 0 ||
+                        element.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2 );
                   };
                   const findSettingsSurface = () => {
                     const markedSurface = surfaces.filter(hasSettingsText).sort((a, b) => clean(a.innerText).length - clean(b.innerText).length)[0];
                     if (markedSurface) return markedSurface;
                     const intelligence = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Intelligence'));
                     const language = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Language'));
-                    if (intelligence && language) {
-                      let surface = intelligence;
+                    const anchor = intelligence || language;
+                    if (anchor && language) {
+                      let surface = anchor;
                       for (let depth = 0; depth < 20 && surface; depth += 1, surface = surface.parentElement) {
                         if (!visible(surface)) continue;
                         const text = surface.innerText || '';
@@ -1131,6 +1141,9 @@ impl BrowserSession {
         }
         if state.intelligence.is_some() {
             self.status.intelligence = state.intelligence;
+        } else if self.options_fetched_at.is_some() && self.status.available_intelligence.is_empty()
+        {
+            self.status.intelligence = None;
         }
         if state.language.is_some() {
             self.status.language = state.language;
@@ -1602,6 +1615,9 @@ impl BrowserSession {
                     self.status.available_voices = options.voices;
                     self.status.available_intelligence = options.intelligence;
                     self.status.available_languages = options.languages;
+                    if self.status.available_intelligence.is_empty() {
+                        self.status.intelligence = None;
+                    }
                     if current_voice.is_some() {
                         self.status.voice = current_voice;
                         self.status.voice_description = current_voice_description;
@@ -1697,12 +1713,13 @@ impl BrowserSession {
                   const hasExactText = (element, value) => clean(element?.textContent).toLowerCase() === value.toLowerCase();
                   const hasExactDescendant = (element, value) => hasExactText(element, value) || [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, value));
                   const surfaces = [...document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"],[data-state="open"]')].filter(visible);
-                  const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText).length <= 5000 && /\bintelligence\b/i.test(element.innerText || '') && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Intelligence') && hasExactDescendant(element, 'Language');
+                  const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText || '').length <= 5000 && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Language') && (/\bintelligence\b/i.test(element.innerText || '') || /\bvoice\b/i.test(element.innerText || '') || element.querySelectorAll('[role="radio"],input[type="radio"]').length > 0 || element.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2);
                   if (surfaces.filter(hasSettingsText).sort((a, b) => clean(a.innerText).length - clean(b.innerText).length)[0]) return true;
-                  const intelligence = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Intelligence'));
-                  const language = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Language'));
-                  if (intelligence && language) {
-                    let surface = intelligence;
+                    const intelligence = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Intelligence'));
+                    const language = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Language'));
+                    const anchor = intelligence || language;
+                    if (anchor && language) {
+                      let surface = anchor;
                     for (let depth = 0; depth < 20 && surface; depth += 1, surface = surface.parentElement) {
                       if (!visible(surface)) continue;
                       const text = surface.innerText || '';
@@ -1751,14 +1768,15 @@ impl BrowserSession {
                   const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
                   const hasExactText = (element, value) => clean(element?.textContent).toLowerCase() === value.toLowerCase();
                   const hasExactDescendant = (element, value) => hasExactText(element, value) || [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, value));
-                  const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText).length <= 5000 && /\bintelligence\b/i.test(element.innerText || '') && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Intelligence') && hasExactDescendant(element, 'Language');
+                  const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText || '').length <= 5000 && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Language') && (/\bintelligence\b/i.test(element.innerText || '') || /\bvoice\b/i.test(element.innerText || '') || element.querySelectorAll('[role="radio"],input[type="radio"]').length > 0 || element.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2);
                   const surfaces = [...document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"],[data-state="open"]')].filter(visible).filter(hasSettingsText).sort((a, b) => clean(a.innerText).length - clean(b.innerText).length);
                   let surface = surfaces[0];
                   if (!surface) {
                     const intelligence = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Intelligence'));
                     const language = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Language'));
-                    if (intelligence && language) {
-                      for (let depth = 0, candidate = intelligence; depth < 20 && candidate; depth += 1, candidate = candidate.parentElement) {
+                    const anchor = intelligence || language;
+                    if (anchor && language) {
+                      for (let depth = 0, candidate = anchor; depth < 20 && candidate; depth += 1, candidate = candidate.parentElement) {
                         if (!visible(candidate)) continue;
                         const text = candidate.innerText || '';
                         if (!candidate.closest('nav,aside') && clean(text).length <= 5000 && /\blanguage\b/i.test(text) && hasExactDescendant(candidate, 'Language') && (candidate.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2 || /voice settings|voice customization/i.test(text))) { surface = candidate; break; }
@@ -1889,6 +1907,14 @@ impl BrowserSession {
         label: &str,
         target: &str,
     ) -> Result<BrowserStatus, String> {
+        if label.eq_ignore_ascii_case("Intelligence")
+            && self.options_fetched_at.is_some()
+            && self.status.available_intelligence.is_empty()
+        {
+            return Err(
+                "ChatGPT Intelligence is not available on this ChatGPT account.".to_owned(),
+            );
+        }
         self.open_voice_settings().await?;
         let cdp = self
             .cdp
@@ -1909,7 +1935,7 @@ impl BrowserSession {
           const metadata = (element) => clean(`${element?.getAttribute('aria-label') || ''} ${element?.getAttribute('title') || ''} ${element?.textContent || ''}`);
           const hasExactText = (element, value) => clean(element?.textContent).toLowerCase() === value.toLowerCase();
           const hasExactDescendant = (element, value) => hasExactText(element, value) || [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, value));
-          const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText).length <= 5000 && /\bintelligence\b/i.test(element.innerText || '') && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Intelligence') && hasExactDescendant(element, 'Language');
+          const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText || '').length <= 5000 && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Language') && (/\bintelligence\b/i.test(element.innerText || '') || /\bvoice\b/i.test(element.innerText || '') || element.querySelectorAll('[role="radio"],input[type="radio"]').length > 0 || element.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2);
           const settingsSurface = () => {
             const surfaces = [...document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"],[data-state="open"]')].filter(visible);
             const marked = surfaces.filter(hasSettingsText).sort((a, b) => clean(a.innerText).length - clean(b.innerText).length)[0];
@@ -1919,7 +1945,7 @@ impl BrowserSession {
             for (let candidate = labelNode, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {
               const text = candidate.innerText || '';
               const controls = candidate.querySelectorAll('button,[role="button"],[role="combobox"],select').length;
-              if (visible(candidate) && !candidate.closest('nav,aside') && clean(text).length <= 5000 && /\bintelligence\b/i.test(text) && /\blanguage\b/i.test(text) && hasExactDescendant(candidate, 'Language') && (controls >= 2 || /voice settings|voice customization/i.test(text))) return candidate;
+              if (visible(candidate) && !candidate.closest('nav,aside') && clean(text).length <= 5000 && /\blanguage\b/i.test(text) && hasExactDescendant(candidate, 'Language') && (controls >= 2 || /voice settings|voice customization/i.test(text))) return candidate;
             }
             return null;
           };
@@ -1963,7 +1989,7 @@ impl BrowserSession {
           const matchesLabel = (element) => clean(element.textContent).toLowerCase() === wanted || clean(element.getAttribute('aria-label')).toLowerCase() === wanted;
           const hasExactText = (element, value) => clean(element?.textContent).toLowerCase() === value.toLowerCase();
           const hasExactDescendant = (element, value) => hasExactText(element, value) || [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, value));
-          const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText).length <= 5000 && /\bintelligence\b/i.test(element.innerText || '') && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Intelligence') && hasExactDescendant(element, 'Language');
+          const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText || '').length <= 5000 && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Language') && (/\bintelligence\b/i.test(element.innerText || '') || /\bvoice\b/i.test(element.innerText || '') || element.querySelectorAll('[role="radio"],input[type="radio"]').length > 0 || element.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2);
           const settingsSurface = () => {
             const surfaces = [...document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"],[data-state="open"]')].filter(visible);
             const marked = surfaces.filter(hasSettingsText).sort((a, b) => clean(a.innerText).length - clean(b.innerText).length)[0];
@@ -1973,7 +1999,7 @@ impl BrowserSession {
             for (let candidate = labelNode, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {
               const text = candidate.innerText || '';
               const controls = candidate.querySelectorAll('button,[role="button"],[role="combobox"],select').length;
-              if (visible(candidate) && !candidate.closest('nav,aside') && clean(text).length <= 5000 && /\bintelligence\b/i.test(text) && /\blanguage\b/i.test(text) && hasExactDescendant(candidate, 'Language') && (controls >= 2 || /voice settings|voice customization/i.test(text))) return candidate;
+              if (visible(candidate) && !candidate.closest('nav,aside') && clean(text).length <= 5000 && /\blanguage\b/i.test(text) && hasExactDescendant(candidate, 'Language') && (controls >= 2 || /voice settings|voice customization/i.test(text))) return candidate;
             }
             return null;
           };
@@ -2068,14 +2094,15 @@ impl BrowserSession {
                   const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
                   const hasExactText = (element, value) => clean(element?.textContent).toLowerCase() === value.toLowerCase();
                   const hasExactDescendant = (element, value) => hasExactText(element, value) || [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, value));
-                  const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText).length <= 5000 && /\bintelligence\b/i.test(element.innerText || '') && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Intelligence') && hasExactDescendant(element, 'Language');
+                  const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText || '').length <= 5000 && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Language') && (/\bintelligence\b/i.test(element.innerText || '') || /\bvoice\b/i.test(element.innerText || '') || element.querySelectorAll('[role="radio"],input[type="radio"]').length > 0 || element.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2);
                   const surfaces = [...document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"],[data-state="open"]')].filter(visible);
                   let surface = surfaces.filter(hasSettingsText).sort((a, b) => clean(a.innerText).length - clean(b.innerText).length)[0];
                   if (!surface) {{
                     const intelligence = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Intelligence'));
                     const language = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Language'));
-                    if (intelligence && language) {{
-                      for (let candidate = intelligence, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {{
+                    const anchor = intelligence || language;
+                    if (anchor && language) {{
+                      for (let candidate = anchor, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {{
                         if (visible(candidate) && !candidate.closest('nav,aside') && clean(candidate.innerText).length <= 5000 && /\blanguage\b/i.test(candidate.innerText || '') && hasExactDescendant(candidate, 'Language') && (candidate.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2 || /voice settings|voice customization/i.test(candidate.innerText || ''))) {{
                           surface = candidate;
                           break;
@@ -2120,14 +2147,15 @@ impl BrowserSession {
                   const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
                   const hasExactText = (element, value) => clean(element?.textContent).toLowerCase() === value.toLowerCase();
                   const hasExactDescendant = (element, value) => hasExactText(element, value) || [...element.querySelectorAll('*')].some((child) => visible(child) && hasExactText(child, value));
-                  const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText).length <= 5000 && /\bintelligence\b/i.test(element.innerText || '') && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Intelligence') && hasExactDescendant(element, 'Language');
+                  const hasSettingsText = (element) => !element.closest('nav,aside') && clean(element.innerText || '').length <= 5000 && /\blanguage\b/i.test(element.innerText || '') && hasExactDescendant(element, 'Language') && (/\bintelligence\b/i.test(element.innerText || '') || /\bvoice\b/i.test(element.innerText || '') || element.querySelectorAll('[role="radio"],input[type="radio"]').length > 0 || element.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2);
                   const surfaces = [...document.querySelectorAll('dialog[open],[role="dialog"],[aria-modal="true"],[data-state="open"]')].filter(visible);
                   let surface = surfaces.filter(hasSettingsText).sort((a, b) => clean(a.innerText).length - clean(b.innerText).length)[0];
                   if (!surface) {{
                     const intelligence = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Intelligence'));
                     const language = [...document.querySelectorAll('*')].find((element) => visible(element) && !element.closest('nav,aside') && hasExactText(element, 'Language'));
-                    if (intelligence && language) {{
-                      for (let candidate = intelligence, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {{
+                    const anchor = intelligence || language;
+                    if (anchor && language) {{
+                      for (let candidate = anchor, depth = 0; candidate && depth < 20; candidate = candidate.parentElement, depth += 1) {{
                         if (visible(candidate) && !candidate.closest('nav,aside') && clean(candidate.innerText).length <= 5000 && /\blanguage\b/i.test(candidate.innerText || '') && hasExactDescendant(candidate, 'Language') && (candidate.querySelectorAll('button,[role="button"],[role="combobox"],select').length >= 2 || /voice settings|voice customization/i.test(candidate.innerText || ''))) {{
                           surface = candidate;
                           break;
@@ -2191,6 +2219,9 @@ impl BrowserSession {
                         self.status.available_voices = options.voices;
                         self.status.available_intelligence = options.intelligence;
                         self.status.available_languages = options.languages;
+                        if self.status.available_intelligence.is_empty() {
+                            self.status.intelligence = None;
+                        }
                         if current_voice.is_some() {
                             self.status.voice = current_voice;
                             self.status.voice_description = current_voice_description;

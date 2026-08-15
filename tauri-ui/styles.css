@@ -140,6 +140,7 @@ output { color: var(--accent); font-weight: 600; float: right; }
 .onboarding-banner { display: flex; align-items: center; gap: 12px; margin: 10px 14px 0; padding: 10px 12px; border: 1px solid var(--warning); border-radius: 6px; background: var(--surface-raised); color: var(--text); }
 .onboarding-copy { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
 .onboarding-copy strong { color: var(--warning); }
+.onboarding-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .hidden { display: none !important; }
 @media (max-width: 850px) { .tab-button { min-width: auto; padding-inline: 9px; } .chart-grid, .system-grid { grid-template-columns: 1fr; } .stat-grid { grid-template-columns: repeat(3, minmax(110px, 1fr)); } }
 @media (max-width: 650px) { .split-layout, .form-grid { grid-template-columns: 1fr; } .detail-grid { grid-template-columns: 1fr; } .stat-grid { grid-template-columns: repeat(2, minmax(110px, 1fr)); } .tab-button { font-size: 12px; padding-inline: 6px; } }
