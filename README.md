@@ -29,20 +29,28 @@ guilds receive isolated subprofiles automatically.
 1. Download the latest `GPTVoice_<version>_x64-setup.exe` from Releases and
    install it.
 2. Open GPTVoice and select the **Config** tab.
-3. Paste the Discord bot token. To find the optional Discord server ID, click
-   **User Settings** (the gear beside your username), scroll to **Advanced**,
-   and turn on **Developer Mode**. Then right-click the server name or icon and
-   choose **Copy Server ID**. Paste that value into GPTVoice and choose **Save
+3. If you do not already have a Discord bot token, open the [Discord Developer
+   Portal](https://discord.com/developers/applications), choose **New
+   Application**, name it, and create it. Open the app's **Bot** page in the
+   left sidebar. Under **Build-a-Bot**, choose **Reset Token**, confirm, and
+   copy the new token immediately. Discord only shows a token when it is
+   generated, and resetting it invalidates the previous token. Treat it like a
+   password and never share it.
+4. In GPTVoice, open **Config** and paste the bot token. To find the Discord
+   server ID, open **User Settings** (the gear beside your username), scroll
+   the settings list until you reach **Developer**, open it, and turn on
+   **Developer Mode**. Then right-click the server name or icon and choose
+   **Copy Server ID**. Paste that value into GPTVoice and choose **Save
    changes**. A saved token is shown only as stars. GPTVoice starts the Discord
    connection automatically. The guild ID selects the server used for startup
    status and thread prefetching; other servers can still use the global slash
    commands.
-4. Join a Discord voice channel and run `/join` in a text channel where the
+5. Join a Discord voice channel and run `/join` in a text channel where the
    bot can send messages.
-5. On the first run, GPTVoice opens its dedicated browser profile. Sign into
+6. On the first run, GPTVoice opens its dedicated browser profile. Sign into
    ChatGPT and complete any human verification yourself. Then run `/join`
    again.
-6. GPTVoice prefetches the five most recent ChatGPT threads automatically when
+7. GPTVoice prefetches the five most recent ChatGPT threads automatically when
    the dedicated browser session starts. In the desktop **Status** tab, choose
    **New thread + Voice** or select a recent thread and choose **Resume + Voice**.
 

@@ -170,7 +170,7 @@ function updateSetupGuide() {
   const configButton = $("setup-banner-config");
   if (!tokenReady) {
     if (title) title.textContent = "Welcome to GPTVoice";
-    if (copy) copy.textContent = "Start in Config: enter your Discord bot token and server ID, then save the changes.";
+    if (copy) copy.textContent = "Start in Config: paste your Discord bot token, add your server ID, and save the changes.";
     if (configButton) configButton.classList.remove("hidden");
   } else if (!guildReady) {
     if (title) title.textContent = "Finish Discord setup";
@@ -178,7 +178,7 @@ function updateSetupGuide() {
     if (configButton) configButton.classList.remove("hidden");
   } else {
     if (title) title.textContent = "Start the dedicated ChatGPT browser";
-    if (copy) copy.textContent = "Your configuration is saved. Open Status and choose Start browser, then sign in to ChatGPT when the window appears.";
+    if (copy) copy.textContent = "Your configuration is saved. Open Status to monitor the dedicated browser; it starts automatically. If it is closed, choose Start browser, then sign in to ChatGPT when the window appears.";
     if (configButton) configButton.classList.add("hidden");
   }
   banner.classList.remove("hidden");
