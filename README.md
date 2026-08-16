@@ -111,8 +111,30 @@ Voice settings, browser visibility, and configuration.
 
 ## Audio and privacy
 
-GPTVoice mixes Discord voices into one ChatGPT microphone stream. ChatGPT is
-not told which person is speaking, and simultaneous speech can overlap.
+GPTVoice is a local, user-operated relay. It does not send voice data to a
+GPTVoice server or store a central copy. When a guild session is active,
+Discord voice audio is received by the local app, mixed into one ChatGPT
+microphone stream, and sent through the signed-in ChatGPT web session to
+ChatGPT/OpenAI.
+
+GPTVoice does not currently include an in-app consent-management system. The
+person operating GPTVoice must inform everyone in the voice channel, before
+enabling the relay, that their voice may be sent to ChatGPT/OpenAI. They are
+responsible for obtaining any permission required by applicable law, Discord
+rules, or server rules.
+
+Do not use GPTVoice to relay audio from people who have not been informed.
+Participants who do not want to take part should leave or mute the voice
+channel, or ask the operator to stop the relay.
+
+GPTVoice does not identify speakers to ChatGPT. Participating voices are mixed
+into one shared conversation. The app may use temporary in-memory audio
+buffers for real-time processing, but it does not intentionally save voice
+recordings.
+
+OpenAI's processing is governed by the signed-in ChatGPT account and OpenAI's
+policies. GPTVoice cannot control OpenAI's retention, training, or regional
+processing. This section is a technical disclosure, not legal advice.
 
 GPTVoice stores its settings here:
 
