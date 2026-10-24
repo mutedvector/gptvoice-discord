@@ -31,6 +31,8 @@ songbird = { version = "0.6.0", default-features = false, features = ["serenity"
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 symphonia-core = "0.5.2"
 symphonia = { version = "0.5.2", default-features = false, features = ["pcm"] }
+
+[target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]

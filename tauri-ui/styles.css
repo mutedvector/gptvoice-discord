@@ -37,7 +37,7 @@ html[data-theme="darcula"] { --background: #2b2b2b; --surface: #313335; --surfac
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
-body { margin: 0; background: var(--background); color: var(--text); font-family: "Segoe UI", Arial, sans-serif; font-size: var(--font-size); overflow: hidden; }
+body { margin: 0; background: var(--background); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; font-size: var(--font-size); overflow: hidden; }
 button, input, select, textarea { font: inherit; }
 button { color: inherit; }
 .app-shell { height: 100vh; display: flex; flex-direction: column; }

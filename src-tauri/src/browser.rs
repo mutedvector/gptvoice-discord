@@ -1225,7 +1225,7 @@ impl BrowserSession {
 
         if self.status.window_hidden {
             if let Some(cdp) = self.cdp.as_ref() {
-                // Keep Chromium's renderer active while its Windows window is hidden. Without
+                // Keep Chromium's renderer active while its browser window is hidden. Without
                 // this nudge, ChatGPT can defer Voice UI and media state changes until the
                 // browser is shown again.
                 let _ = cdp.call("Page.bringToFront", json!({})).await;
@@ -1306,7 +1306,7 @@ impl BrowserSession {
         let Some(process_id) = self.child.as_ref().map(Child::id) else {
             return;
         };
-        if set_process_windows_visible(process_id, !hidden) > 0 {
+        if set_process_visible(process_id, !hidden) > 0 {
             self.status.window_hidden = hidden;
         }
     }
@@ -2687,26 +2687,70 @@ impl BrowserRuntime {
 }
 
 fn find_browser_executable(configured: Option<&Path>) -> Option<PathBuf> {
-    let local_app_data = std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    let program_files = std::env::var_os("ProgramFiles")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    let program_files_x86 = std::env::var_os("ProgramFiles(x86)")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    let candidates = [
-        configured.map(Path::to_path_buf),
-        Some(local_app_data.join("BraveSoftware/Brave-Browser/Application/brave.exe")),
-        Some(program_files.join("BraveSoftware/Brave-Browser/Application/brave.exe")),
-        Some(program_files_x86.join("BraveSoftware/Brave-Browser/Application/brave.exe")),
-        Some(local_app_data.join("Google/Chrome/Application/chrome.exe")),
-        Some(program_files.join("Google/Chrome/Application/chrome.exe")),
-        Some(program_files_x86.join("Google/Chrome/Application/chrome.exe")),
-        Some(local_app_data.join("Microsoft/Edge/Application/msedge.exe")),
-    ];
-    candidates.into_iter().flatten().find(|path| path.is_file())
+    let mut candidates = vec![configured.map(Path::to_path_buf)];
+
+    #[cfg(windows)]
+    {
+        let local_app_data = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        let program_files = std::env::var_os("ProgramFiles")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        let program_files_x86 = std::env::var_os("ProgramFiles(x86)")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        candidates.extend([
+            Some(local_app_data.join("BraveSoftware/Brave-Browser/Application/brave.exe")),
+            Some(program_files.join("BraveSoftware/Brave-Browser/Application/brave.exe")),
+            Some(program_files_x86.join("BraveSoftware/Brave-Browser/Application/brave.exe")),
+            Some(local_app_data.join("Google/Chrome/Application/chrome.exe")),
+            Some(program_files.join("Google/Chrome/Application/chrome.exe")),
+            Some(program_files_x86.join("Google/Chrome/Application/chrome.exe")),
+            Some(local_app_data.join("Microsoft/Edge/Application/msedge.exe")),
+        ]);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        let applications = PathBuf::from("/Applications");
+        let user_applications = home.join("Applications");
+        for root in [applications, user_applications] {
+            candidates.extend([
+                Some(root.join("Brave Browser.app/Contents/MacOS/Brave Browser")),
+                Some(root.join("Google Chrome.app/Contents/MacOS/Google Chrome")),
+                Some(root.join("Microsoft Edge.app/Contents/MacOS/Microsoft Edge")),
+                Some(root.join("Chromium.app/Contents/MacOS/Chromium")),
+            ]);
+        }
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    candidates.extend([
+        Some(PathBuf::from("/usr/bin/brave-browser")),
+        Some(PathBuf::from("/usr/bin/google-chrome")),
+        Some(PathBuf::from("/usr/bin/chromium")),
+        Some(PathBuf::from("/usr/bin/microsoft-edge")),
+    ]);
+
+    candidates
+        .into_iter()
+        .flatten()
+        .map(resolve_browser_path)
+        .find(|path| path.is_file())
+}
+
+fn resolve_browser_path(path: PathBuf) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    if path.extension().is_some_and(|extension| extension == "app") {
+        if let Some(name) = path.file_stem() {
+            return path.join("Contents/MacOS").join(name);
+        }
+    }
+    path
 }
 
 async fn reserve_port() -> Result<u16, String> {
@@ -2741,6 +2785,13 @@ fn launch_browser(
     } else {
         command.arg(url);
     }
+    #[cfg(unix)]
+    {
+        // Keep the dedicated browser in its own process group so closing GPTVoice
+        // cannot leave Chromium helper processes behind on macOS or Linux.
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -2760,14 +2811,17 @@ fn terminate_process_tree(process_id: u32) {
             .creation_flags(0x08000000)
             .output();
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        let _ = process_id;
+        // launch_browser creates a dedicated process group on Unix. A negative
+        // PID addresses that group, including Chromium's helper processes.
+        let group_id = format!("-{process_id}");
+        let _ = Command::new("kill").args(["-TERM", &group_id]).status();
     }
 }
 
 #[cfg(windows)]
-fn set_process_windows_visible(process_id: u32, visible: bool) -> usize {
+fn set_process_visible(process_id: u32, visible: bool) -> usize {
     use std::mem::MaybeUninit;
     use windows_sys::{
         core::BOOL,
@@ -2849,8 +2903,41 @@ fn set_process_windows_visible(process_id: u32, visible: bool) -> usize {
     context.changed
 }
 
-#[cfg(not(windows))]
-fn set_process_windows_visible(_process_id: u32, _visible: bool) -> usize {
+#[cfg(target_os = "macos")]
+fn set_process_visible(process_id: u32, visible: bool) -> usize {
+    // Chromium is a separate process on macOS. System Events can change its
+    // app visibility without closing the page or its WebRTC session. This may
+    // require the user to grant GPTVoice Accessibility access in System
+    // Settings > Privacy & Security > Accessibility.
+    let visibility = if visible { "true" } else { "false" };
+    let foreground = if visible {
+        "\n      set frontmost to true"
+    } else {
+        ""
+    };
+    let script = format!(
+        r#"tell application "System Events"
+  try
+    tell (first process whose unix id is {process_id})
+      set visible to {visibility}{foreground}
+    end tell
+    return "1"
+  on error
+    return "0"
+  end try
+end tell"#
+    );
+    match Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+    {
+        Ok(output) if output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "1" => 1,
+        _ => 0,
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn set_process_visible(_process_id: u32, _visible: bool) -> usize {
     0
 }
 

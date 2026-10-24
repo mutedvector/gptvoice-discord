@@ -2,9 +2,9 @@
 
 ## Talk with ChatGPT Voice in Discord
 
-GPTVoice is a small native Windows app that brings a ChatGPT Voice conversation
-into a Discord voice channel, so you and your friends can talk with ChatGPT
-together.
+GPTVoice is a small native desktop app for macOS and Windows that brings a
+ChatGPT Voice conversation into a Discord voice channel, so you and your
+friends can talk with ChatGPT together.
 
 It uses the normal ChatGPT website and your own ChatGPT account. You do not
 need an OpenAI API key or a Realtime API subscription.
@@ -16,11 +16,21 @@ guilds receive isolated subprofiles automatically.
 
 ## What you need
 
-- Windows 10 or newer with WebView2 installed (it is already present on most
-  Windows systems).
+- macOS on Apple Silicon (including M4) or Intel, or Windows 10 or newer.
+  Tauri uses the native WebKit WebView on macOS and WebView2 on Windows.
 - A Discord bot token.
 - A ChatGPT account with Voice available.
-- Brave, Chrome, or Edge installed for the dedicated ChatGPT browser session.
+- Brave, Chrome, Chromium, or Edge installed for the dedicated ChatGPT browser
+  session. On macOS, GPTVoice detects the standard `.app` installations in
+  `/Applications` and `~/Applications`.
+
+On macOS, the browser is a separate Chromium process with its own profile and
+CDP endpoint. The first time GPTVoice hides or shows that browser, macOS may
+ask for Accessibility access. Grant it to GPTVoice in **System Settings →
+Privacy & Security → Accessibility** (or to the launcher used during local
+development) if you want the **Hide browser** and **Show browser** controls to work. The relay itself does not need a native
+microphone recording permission: Discord receives audio through the bot, and
+ChatGPT receives the mixed stream through the signed-in browser page.
 - A Discord bot invitation created with the `bot` and `applications.commands`
   OAuth2 scopes. Give the bot these permissions: **View Channels**, **Send
   Messages**, **Embed Links**, **Read Message History**, **Connect**, and
@@ -139,12 +149,15 @@ processing. This section is a technical disclosure, not legal advice.
 GPTVoice stores its settings here:
 
 ```text
-%LOCALAPPDATA%\GPTVoice\config.json
+Windows: %LOCALAPPDATA%\GPTVoice\config.json
+macOS:   ~/Library/Application Support/com.gptvoice.desktop.tauri/config.json
 ```
 
 The file contains the Discord bot token. The dedicated browser profiles under
 the same folder contain browser login data. Protect both locations like a
-password and never upload them.
+password and never upload them. The path is resolved through Tauri's
+platform-local application-data directory; do not hard-code it in scripts or
+backup tooling.
 
 ## Slash commands
 
@@ -159,11 +172,14 @@ from the local desktop Status and Config tabs.
 
 ## For developers
 
-Building the Windows app requires a current Rust toolchain, the Tauri CLI,
-WebView2, and the Windows C++ build tools. The packaged app does not require a
-Node.js runtime, Playwright download, or extra Windows audio driver.
+Building requires a current Rust toolchain and the Tauri CLI. Windows builds
+also need the WebView2 runtime and Windows C++ build tools. macOS builds use
+the system WebKit WebView and Xcode Command Line Tools; no extra audio driver
+or Node.js runtime is required by the packaged app. On Apple Silicon, install
+the arm64 Rust target and build natively to produce a native M4-compatible
+bundle.
 
-```powershell
+```sh
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo tauri dev
 cargo tauri build
@@ -178,10 +194,31 @@ src-tauri/            Rust/Tauri desktop host, browser relay, and Discord runtim
 tauri-ui/             Native control panel frontend
 src/browser/          Browser-injected media bridge asset used by the Rust host
 test/                 Browser-asset checks; native tests live with the Rust code
-src-tauri/icons/      Windows application icons
+src-tauri/icons/      Cross-platform application icons
 ```
 
-The release installer is produced in `src-tauri/target/release/bundle/nsis/`.
+On Windows, `cargo tauri build` produces the configured Windows bundles. On
+macOS, it produces an `.app` and `.dmg` under
+`src-tauri/target/release/bundle/`. The Tauri configuration selects the
+platform-appropriate targets while retaining the Windows icon and installer
+metadata.
+
+### Porting notes
+
+- The Discord/Songbird relay, PCM queues, WebSocket transport, and browser
+  media bridge are platform-neutral; they do not call WASAPI or CoreAudio.
+- Browser discovery is platform-specific. macOS resolves the executable inside
+  the standard Brave, Chrome, Chromium, or Edge application bundle and also
+  accepts an explicit executable path in Config.
+- Browser launch uses a dedicated Unix process group on macOS so Chromium
+  helper processes are terminated when GPTVoice exits. Windows retains its
+  existing process-tree cleanup.
+- Browser visibility uses macOS System Events through `osascript`. If
+  Accessibility access is denied, the browser remains usable and only the
+  hide/show convenience controls are unavailable.
+- ChatGPT Web Voice is controlled through the public browser page and CDP. A
+  future ChatGPT UI change can still require updates to the DOM discovery
+  scripts; this is independent of the host operating system.
 
 ## License
 
