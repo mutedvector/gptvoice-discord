@@ -311,13 +311,25 @@ impl BrowserStatus {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize)]
 struct CdpTarget {
     id: String,
     #[serde(rename = "type")]
     target_type: String,
     #[serde(rename = "webSocketDebuggerUrl")]
     websocket_url: Option<String>,
+}
+
+fn select_startup_target<'a>(targets: &'a [CdpTarget], target_id: &str) -> Option<&'a CdpTarget> {
+    targets.iter().find(|target| {
+        target.target_type == "page"
+            && !target_id.is_empty()
+            && target.id == target_id
+            && target
+                .websocket_url
+                .as_deref()
+                .is_some_and(|url| !url.is_empty())
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -800,7 +812,7 @@ impl BrowserSession {
             "Launching the isolated browser with CDP enabled.",
         );
         let port = reserve_port().await?;
-        let child = launch_browser(&executable, &self.profile_dir, &self.url, port, true)?;
+        let child = launch_browser(&executable, &self.profile_dir, "about:blank", port, true)?;
         self.browser_process_id = Some(child.id());
         self.child = Some(child);
         let version_url = format!("http://127.0.0.1:{port}/json/version");
@@ -812,24 +824,28 @@ impl BrowserSession {
         )
         .await?;
         emit_browser_log(app, &self.guild_id, "Browser control endpoint is ready.");
+        // Crea una scheda e usa l'ID restituito da Chrome. La prima pagina
+        // dell'elenco può essere un pannello interno, anche di configurazione.
+        let target_id = create_browser_tab(port).await?;
         let targets_url = format!("http://127.0.0.1:{port}/json/list");
-        let targets = wait_for_json::<Vec<CdpTarget>>(
+        let target = wait_for_startup_target(
             &targets_url,
+            &target_id,
             self.child
                 .as_mut()
                 .ok_or_else(|| "Browser process handle was lost".to_owned())?,
         )
         .await?;
-        let target = targets
-            .iter()
-            .find(|target| target.target_type == "page" && target.websocket_url.is_some())
-            .ok_or_else(|| "Browser CDP exposed no controllable page".to_owned())?;
         let websocket_url = target
             .websocket_url
             .as_deref()
             .ok_or_else(|| "Browser page did not expose a CDP WebSocket".to_owned())?;
         let cdp = CdpClient::connect(websocket_url).await?;
-        emit_browser_log(app, &self.guild_id, "Connected to the browser page.");
+        emit_browser_log(
+            app,
+            &self.guild_id,
+            "Connected to the explicitly launched browser tab.",
+        );
         cdp.call("Runtime.enable", json!({})).await?;
         cdp.call("Page.enable", json!({})).await?;
         cdp.call("Page.setBypassCSP", json!({"enabled": true}))
@@ -2737,7 +2753,7 @@ fn launch_browser(
         command
             .arg(format!("--remote-debugging-port={port}"))
             .arg("--remote-debugging-address=127.0.0.1")
-            .arg("about:blank");
+            .arg(url);
     } else {
         command.arg(url);
     }
@@ -2775,9 +2791,10 @@ fn set_process_windows_visible(process_id: u32, visible: bool) -> usize {
             Foundation::{HWND, LPARAM},
             System::Threading::{AttachThreadInput, GetCurrentThreadId},
             UI::WindowsAndMessaging::{
-                BringWindowToTop, EnumWindows, GetForegroundWindow, GetWindowTextLengthW,
-                GetWindowTextW, GetWindowThreadProcessId, SetForegroundWindow, ShowWindow, SW_HIDE,
-                SW_RESTORE,
+                BringWindowToTop, EnumWindows, GetForegroundWindow, GetWindow, GetWindowLongPtrW,
+                GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+                SetForegroundWindow, ShowOwnedPopups, ShowWindow, GWL_STYLE, GW_OWNER, SW_HIDE,
+                SW_RESTORE, WS_CAPTION,
             },
         },
     };
@@ -2795,41 +2812,48 @@ fn set_process_windows_visible(process_id: u32, visible: bool) -> usize {
         let mut owner = MaybeUninit::<u32>::zeroed();
         GetWindowThreadProcessId(hwnd, owner.as_mut_ptr());
         if owner.assume_init() == context.process_id {
+            // Chrome owns hidden compositor/IME surfaces as well as browser frames.
+            // Never reveal those surfaces while trying to show the browser.
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+            if !GetWindow(hwnd, GW_OWNER).is_null() || style & WS_CAPTION != WS_CAPTION {
+                return 1;
+            }
+            let title_length = GetWindowTextLengthW(hwnd);
+            let mut title = vec![0u16; title_length.max(0) as usize + 1];
+            let copied = GetWindowTextW(hwnd, title.as_mut_ptr(), title.len() as i32);
+            let title = String::from_utf16_lossy(&title[..copied.max(0) as usize]);
+            let normalized_title = title.trim().to_ascii_lowercase();
+            if normalized_title.is_empty()
+                || matches!(normalized_title.as_str(), "default ime" | "msctfime ui")
+            {
+                return 1;
+            }
             if context.visible {
                 ShowWindow(hwnd, SW_RESTORE);
+                // Only restore popups previously hidden with their owner.
+                ShowOwnedPopups(hwnd, 1);
                 if !context.activated {
-                    let title_length = GetWindowTextLengthW(hwnd);
-                    let mut title = vec![0u16; title_length.max(0) as usize + 1];
-                    let copied = GetWindowTextW(hwnd, title.as_mut_ptr(), title.len() as i32);
-                    let title = String::from_utf16_lossy(&title[..copied.max(0) as usize]);
-                    let normalized_title = title.to_ascii_lowercase();
-                    let is_utility_window = normalized_title.is_empty()
-                        || normalized_title.contains("restore pages")
-                        || normalized_title.contains("default ime")
-                        || normalized_title.contains("msctfime");
-                    if !is_utility_window {
-                        let current_thread = GetCurrentThreadId();
-                        let foreground = GetForegroundWindow();
-                        let mut foreground_process = 0u32;
-                        let foreground_thread = if foreground.is_null() {
-                            0
-                        } else {
-                            GetWindowThreadProcessId(foreground, &mut foreground_process)
-                        };
-                        let attached =
-                            foreground_thread != 0 && foreground_thread != current_thread;
-                        if attached {
-                            AttachThreadInput(current_thread, foreground_thread, 1);
-                        }
-                        BringWindowToTop(hwnd);
-                        SetForegroundWindow(hwnd);
-                        if attached {
-                            AttachThreadInput(current_thread, foreground_thread, 0);
-                        }
-                        context.activated = true;
+                    let current_thread = GetCurrentThreadId();
+                    let foreground = GetForegroundWindow();
+                    let mut foreground_process = 0u32;
+                    let foreground_thread = if foreground.is_null() {
+                        0
+                    } else {
+                        GetWindowThreadProcessId(foreground, &mut foreground_process)
+                    };
+                    let attached = foreground_thread != 0 && foreground_thread != current_thread;
+                    if attached {
+                        AttachThreadInput(current_thread, foreground_thread, 1);
                     }
+                    BringWindowToTop(hwnd);
+                    SetForegroundWindow(hwnd);
+                    if attached {
+                        AttachThreadInput(current_thread, foreground_thread, 0);
+                    }
+                    context.activated = true;
                 }
             } else {
+                ShowOwnedPopups(hwnd, 0);
                 ShowWindow(hwnd, SW_HIDE);
             }
             context.changed += 1;
@@ -2852,6 +2876,44 @@ fn set_process_windows_visible(process_id: u32, visible: bool) -> usize {
 #[cfg(not(windows))]
 fn set_process_windows_visible(_process_id: u32, _visible: bool) -> usize {
     0
+}
+
+async fn create_browser_tab(port: u16) -> Result<String, String> {
+    let created: Value = HttpClient::new()
+        .put(format!("http://127.0.0.1:{port}/json/new?about%3Ablank"))
+        .timeout(START_TIMEOUT)
+        .send()
+        .await
+        .and_then(|response| response.error_for_status())
+        .map_err(|error| format!("Could not create dedicated browser tab: {error}"))?
+        .json()
+        .await
+        .map_err(|error| format!("Could not read dedicated browser tab: {error}"))?;
+    created
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| "Chrome did not identify the newly created tab".to_owned())
+}
+
+async fn wait_for_startup_target(
+    endpoint: &str,
+    target_id: &str,
+    child: &mut Child,
+) -> Result<CdpTarget, String> {
+    timeout(START_TIMEOUT, async {
+        loop {
+            let targets = wait_for_json::<Vec<CdpTarget>>(endpoint, child).await?;
+            if let Some(target) = select_startup_target(&targets, target_id) {
+                return Ok(target.clone());
+            }
+            // L'endpoint può essere pronto prima della scheda richiesta.
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .map_err(|_| "The explicitly launched browser tab did not become available; refusing to control a different page".to_owned())?
 }
 
 async fn wait_for_json<T: for<'de> Deserialize<'de>>(
@@ -3057,6 +3119,181 @@ pub async fn set_mic_muted(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn browser_tab_creation_uses_put_and_returns_created_id() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 1024];
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                let read = stream.read(&mut buffer).unwrap();
+                assert!(read > 0);
+                request.extend_from_slice(&buffer[..read]);
+            }
+            let body = r#"{"id":"created-tab","type":"page","url":"about:blank"}"#;
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+            String::from_utf8(request).unwrap()
+        });
+        assert_eq!(create_browser_tab(port).await.unwrap(), "created-tab");
+        assert!(server
+            .join()
+            .unwrap()
+            .starts_with("PUT /json/new?about%3Ablank HTTP/1.1"));
+    }
+
+    #[test]
+    fn browser_target_selection_ignores_other_pages_and_order() {
+        let startup_url = "about:blank#gptvoice-startup-49152";
+        let mut targets: Vec<CdpTarget> = serde_json::from_value(json!([
+            {"id":"internal", "type":"page", "url":"chrome://internal-panel/", "webSocketDebuggerUrl":"ws://localhost/internal"},
+            {"id":"old", "type":"page", "url":"https://chatgpt.com/", "webSocketDebuggerUrl":"ws://localhost/old"},
+            {"id":"blank", "type":"page", "url":"about:blank", "webSocketDebuggerUrl":"ws://localhost/blank"},
+            {"id":"owned", "type":"page", "url":startup_url, "webSocketDebuggerUrl":"ws://localhost/owned"}
+        ])).unwrap();
+        for _ in 0..targets.len() {
+            assert_eq!(
+                select_startup_target(&targets, "owned").map(|t| t.id.as_str()),
+                Some("owned")
+            );
+            targets.rotate_left(1);
+        }
+        targets.retain(|target| target.id != "owned");
+        assert!(
+            select_startup_target(&targets, "owned").is_none(),
+            "must wait rather than attach to another page"
+        );
+    }
+
+    #[test]
+    fn browser_target_selection_requires_ready_page_with_exact_id() {
+        let startup_url = "about:blank#gptvoice-startup-49152";
+        let targets: Vec<CdpTarget> = serde_json::from_value(json!([
+            {"id":"worker", "type":"worker", "url":startup_url, "webSocketDebuggerUrl":"ws://localhost/worker"},
+            {"id":"not-ready", "type":"page", "url":startup_url},
+            {"id":"empty-socket", "type":"page", "url":startup_url, "webSocketDebuggerUrl":""},
+            {"id":"missing-url", "type":"page", "webSocketDebuggerUrl":"ws://localhost/missing"},
+            {"id":"old-marker", "type":"page", "url":"about:blank#gptvoice-startup-49153", "webSocketDebuggerUrl":"ws://localhost/old"}
+        ])).unwrap();
+        for id in ["worker", "not-ready", "empty-socket", "absent", ""] {
+            assert!(select_startup_target(&targets, id).is_none());
+        }
+        assert!(select_startup_target(&[], "owned").is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn browser_visibility_does_not_reveal_internal_or_owned_windows() {
+        use windows_sys::Win32::{
+            Foundation::HWND,
+            UI::WindowsAndMessaging::{
+                CreateWindowExW, DestroyWindow, IsWindowVisible, ShowWindow, SW_SHOW, WS_CAPTION,
+                WS_OVERLAPPEDWINDOW, WS_POPUP,
+            },
+        };
+
+        struct TestWindows(Vec<HWND>);
+        impl Drop for TestWindows {
+            fn drop(&mut self) {
+                for window in self.0.iter().rev() {
+                    unsafe {
+                        DestroyWindow(*window);
+                    }
+                }
+            }
+        }
+
+        let mut windows = TestWindows(Vec::new());
+        let mut create = |title: &str, style: u32, owner: HWND| {
+            let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+            let title: Vec<u16> = title.encode_utf16().chain(Some(0)).collect();
+            let window = unsafe {
+                CreateWindowExW(
+                    0,
+                    class.as_ptr(),
+                    title.as_ptr(),
+                    style,
+                    0,
+                    0,
+                    100,
+                    100,
+                    owner,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                )
+            };
+            assert!(!window.is_null(), "test window must be created");
+            windows.0.push(window);
+            window
+        };
+        let main = create(
+            "ChatGPT - Google Chrome",
+            WS_OVERLAPPEDWINDOW,
+            std::ptr::null_mut(),
+        );
+        let internal = create("", WS_POPUP, std::ptr::null_mut());
+        let owned = create("Browser helper", WS_POPUP | WS_CAPTION, main);
+        let named_surface = create("Internal surface", WS_POPUP, std::ptr::null_mut());
+        let ime = create("Default IME", WS_OVERLAPPEDWINDOW, std::ptr::null_mut());
+
+        let changed = set_process_windows_visible(std::process::id(), true);
+        assert_eq!(
+            unsafe { IsWindowVisible(internal) },
+            0,
+            "internal Chrome surface must stay hidden"
+        );
+        assert_eq!(
+            unsafe { IsWindowVisible(owned) },
+            0,
+            "hidden owned dialog must stay hidden"
+        );
+        assert_eq!(
+            unsafe { IsWindowVisible(named_surface) },
+            0,
+            "captionless surface must stay hidden"
+        );
+        assert_eq!(
+            unsafe { IsWindowVisible(ime) },
+            0,
+            "utility window must stay hidden"
+        );
+        assert_ne!(
+            unsafe { IsWindowVisible(main) },
+            0,
+            "browser frame must be shown"
+        );
+        assert_eq!(changed, 1);
+        assert_eq!(set_process_windows_visible(std::process::id(), false), 1);
+        assert_eq!(unsafe { IsWindowVisible(main) }, 0);
+        assert_eq!(set_process_windows_visible(std::process::id(), true), 1);
+        assert_eq!(unsafe { IsWindowVisible(internal) }, 0);
+        assert_ne!(unsafe { IsWindowVisible(main) }, 0);
+
+        unsafe {
+            ShowWindow(owned, SW_SHOW);
+        }
+        assert_ne!(unsafe { IsWindowVisible(owned) }, 0);
+        set_process_windows_visible(std::process::id(), false);
+        assert_eq!(
+            unsafe { IsWindowVisible(owned) },
+            0,
+            "visible popup must hide with its owner"
+        );
+        set_process_windows_visible(std::process::id(), true);
+        assert_ne!(
+            unsafe { IsWindowVisible(owned) },
+            0,
+            "previously visible popup must be restored"
+        );
+        assert_eq!(unsafe { IsWindowVisible(internal) }, 0);
+    }
 
     #[test]
     fn sign_in_required_status_exposes_onboarding_state() {
